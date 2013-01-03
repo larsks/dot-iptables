@@ -1,12 +1,17 @@
 #!/usr/bin/python
 
 import os
+import errno
 import sys
 import re
 import subprocess
 import argparse
+import pprint
 
 from jinja2 import Template
+
+re_table='''\*(?P<table>\S+)'''
+re_table = re.compile(re_table)
 
 re_chain=''':(?P<chain>\S+) (?P<policy>\S+) (?P<counters>\S+)'''
 re_chain = re.compile(re_chain)
@@ -28,64 +33,125 @@ def stripped(fd):
     for line in fd:
         yield line.strip()
 
+def handle_table(iptables, mo, line):
+    iptables[mo.group('table')] = {}
+    iptables['_table'] = iptables[mo.group('table')]
+
+def handle_chain(iptables, mo, line):
+    policy = mo.group('policy')
+    if policy == '-':
+        policy = None
+
+    iptables['_table'][mo.group('chain')] = {
+            'policy': policy,
+            'rules': [],
+            'targets': set(),
+            }
+
+def handle_rule(iptables, mo, line):
+    fields = dict( (k, v if v else '') for k,v in mo.groupdict().items())
+    iptables['_table'][fields['chain']]['rules'].append(fields)
+
+    if mo.group('target') and not mo.group('target').isupper():
+        iptables['_table'][fields['chain']]['targets'].add(mo.group('target'))
+
+def handle_commit(iptables, mo, line):
+    iptables['_table'] = None
+
 def read_chains(input):
-    relationships = {}
-    rules = {}
-    policies = {}
+    iptables = {
+            '_table': None,
+            }
+
     for line in stripped(input):
+        mo = re_table.match(line)
+        if mo:
+            handle_table(iptables, mo, line)
+            continue
+
         mo = re_chain.match(line)
         if mo:
-            relationships[mo.group('chain')] = []
-            rules[mo.group('chain')] = []
-            policies[mo.group('chain')] = mo.group('policy')
+            handle_chain(iptables, mo, line)
             continue
 
         mo = re_rule.match(line)
-        if mo is None:
+        if mo:
+            handle_rule(iptables, mo, line)
             continue
 
-        fields = mo.groupdict()
-        for k,v in fields.items():
-            if v is None:
-                fields[k] = ''
-
-        rules[mo.group('chain')].append(fields)
-        if mo.group('target').isupper():
+        if line == 'COMMIT':
+            handle_commit(iptables, None, line)
             continue
 
-        relationships[mo.group('chain')].append(mo.group('target'))
+        print 'skip:', line
 
-    return policies, rules, relationships
+    del iptables['_table']
+    return iptables
 
-def output_rules(policies, rules, opts):
+def output_rules(iptables, opts):
     tmpl = Template(open('rules.html').read())
-    for chain, rules in rules.items():
-        with open(os.path.join(opts.outputdir, '%s.html' % chain), 'w') as fd:
-            fd.write(tmpl.render(chain=chain, rules=rules,
-                policy=policies[chain]))
+    for table, chains in iptables.items():
+        if table.startswith('_'):
+            continue
 
-def output_dot(relationships, opts):
+        dir = os.path.join(opts.outputdir, table)
+        try:
+            os.mkdir(dir)
+        except OSError, detail:
+            if detail.errno == errno.EEXIST:
+                pass
+            else:
+                raise
+
+        for chain, data in chains.items():
+            with open(os.path.join(dir, '%s.html' % chain), 'w') as fd:
+                fd.write(tmpl.render(
+                    table=table,
+                    chain=chain,
+                    rules=data['rules'],
+                    policy=data['policy']))
+
+def output_dot_table(iptables, opts, table):
+    tmpl = Template(open('rules.html').read())
+
     dot = [
-            'digraph iptables {',
+            'digraph table_%s {' % table,
             'rankdir=LR;',
             ]
 
-    for chain in relationships.keys():
-        dot.append('"%s" [URL="%s.html"];' % (chain, chain))
+    for chain, data in iptables[table].items():
+        dot.append('"%s" [URL="%s/%s.html"]' % (
+                chain,
+                table,
+                chain))
 
-    for chain, targets in relationships.items():
-        for target in targets:
-            dot.append('"%s" -> "%s";' % (chain, target))
+    dot.append('')
+
+    for chain, data in iptables[table].items():
+        for target in data['targets']:
+            dot.append('"%s" -> "%s"' % (
+                chain, target))
 
     dot.append('}')
 
-    with open(os.path.join(opts.outputdir, 'iptables.dot'), 'w') as fd:
+    with open(os.path.join(opts.outputdir, '%s.dot' % table), 'w') as fd:
         fd.write('\n'.join(dot))
         fd.write('\n')
 
+def output_dot(iptables, opts):
+    tmpl = Template(open('index.html').read())
+    with open(os.path.join(opts.outputdir, 'index.html'), 'w') as fd:
+        fd.write(tmpl.render(tables=iptables.keys()))
+
+    for table in iptables:
+        if table.startswith('_'):
+            continue
+
+        output_dot_table(iptables, opts, table)
+        continue
+
 def main():
     opts = parse_args()
-    print opts
 
     if not os.path.isdir(opts.outputdir):
         print >>sys.stderr, (
@@ -94,10 +160,9 @@ def main():
                 )
         sys.exit(1)
 
-    policies, rules, relationships = read_chains(sys.stdin)
-
-    output_rules(policies, rules, opts)
-    output_dot(relationships, opts)
+    iptables = read_chains(sys.stdin)
+    output_rules(iptables, opts)
+    output_dot(iptables, opts)
 
 if __name__ == '__main__':
         main()
