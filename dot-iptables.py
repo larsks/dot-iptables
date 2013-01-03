@@ -6,7 +6,9 @@ import re
 import subprocess
 import argparse
 
-re_chain=''':(?P<chain>\S+)( .*)?'''
+from jinja2 import Template
+
+re_chain=''':(?P<chain>\S+) (?P<policy>\S+) (?P<counters>\S+)'''
 re_chain = re.compile(re_chain)
 
 re_rule='''-A (?P<chain>\S+)( (?P<conditions>.*))? -j (?P<target>\S*)( (?P<extra>.*))?'''
@@ -29,50 +31,38 @@ def stripped(fd):
 def read_chains(input):
     relationships = {}
     rules = {}
+    policies = {}
     for line in stripped(input):
         mo = re_chain.match(line)
         if mo:
             relationships[mo.group('chain')] = []
-            rules[mo.group('chain')] = [line]
+            rules[mo.group('chain')] = []
+            policies[mo.group('chain')] = mo.group('policy')
             continue
 
         mo = re_rule.match(line)
         if mo is None:
             continue
-        rules[mo.group('chain')].append(line)
+
+        fields = mo.groupdict()
+        for k,v in fields.items():
+            if v is None:
+                fields[k] = ''
+
+        rules[mo.group('chain')].append(fields)
         if mo.group('target').isupper():
             continue
 
         relationships[mo.group('chain')].append(mo.group('target'))
 
-    return rules, relationships
+    return policies, rules, relationships
 
-def output_rules(rules, opts):
+def output_rules(policies, rules, opts):
+    tmpl = Template(open('rules.html').read())
     for chain, rules in rules.items():
         with open(os.path.join(opts.outputdir, '%s.html' % chain), 'w') as fd:
-            fd.write('<pre class="iptables">\n')
-            for rule in rules:
-                mo = re_rule.match(rule)
-                if mo:
-                    fields = mo.groupdict()
-                    for k,v in fields.items():
-                        if v is None:
-                            fields[k] = ''
-
-                if mo and not mo.group('target').isupper():
-                    fd.write('-A %(chain)s %(conditions)s -j '
-                            '<a href="%(target)s.html">%(target)s</a> %(extra)s'
-                            % fields)
-                    fd.write('\n')
-                elif mo:
-                    fd.write('-A %(chain)s %(conditions)s -j '
-                            '<span class="builtin">%(target)s</span> %(extra)s'
-                            % fields)
-                    fd.write('\n')
-                else:
-                    fd.write('%s\n' % rule)
-
-            fd.write('</pre>\n')
+            fd.write(tmpl.render(chain=chain, rules=rules,
+                policy=policies[chain]))
 
 def output_dot(relationships, opts):
     dot = [
@@ -104,9 +94,9 @@ def main():
                 )
         sys.exit(1)
 
-    rules, relationships = read_chains(sys.stdin)
+    policies, rules, relationships = read_chains(sys.stdin)
 
-    output_rules(rules, opts)
+    output_rules(policies, rules, opts)
     output_dot(relationships, opts)
 
 if __name__ == '__main__':
