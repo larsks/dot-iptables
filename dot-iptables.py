@@ -117,30 +117,13 @@ def output_rules(iptables, opts):
                     policy=data['policy']))
 
 def output_dot_table(iptables, opts, table):
-    tmpl = Template(open('rules.html').read())
-
-    dot = [
-            'digraph table_%s {' % table,
-            'rankdir=LR;',
-            ]
-
-    for chain, data in iptables[table].items():
-        dot.append('"%s" [URL="%s/%s.html"]' % (
-                chain,
-                table,
-                chain))
-
-    dot.append('')
-
-    for chain, data in iptables[table].items():
-        for target in data['targets']:
-            dot.append('"%s" -> "%s"' % (
-                chain, target))
-
-    dot.append('}')
+    tmpl = Template(open('table.dot').read())
 
     with open(os.path.join(opts.outputdir, '%s.dot' % table), 'w') as fd:
-        fd.write('\n'.join(dot))
+        fd.write(tmpl.render(
+            table=table,
+            chains=iptables[table],
+            ))
         fd.write('\n')
 
 def output_dot(iptables, opts):

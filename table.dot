@@ -1,0 +1,13 @@
+digraph table_{{table}} {
+rankdir=LR;
+
+{% for chain in chains -%}
+  "{{chain}}" [URL="filter/{{chain}}.html"]
+{% endfor %}
+{% for chain, data in chains.items() -%}
+{% for target in data.targets -%}
+  "{{chain}}" -> "{{target}}"
+{% endfor -%}
+{% endfor -%}
+}
+
