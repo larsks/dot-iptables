@@ -9,7 +9,7 @@ import argparse
 re_chain=''':(?P<chain>\S+)( .*)?'''
 re_chain = re.compile(re_chain)
 
-re_rule='''-A (?P<chain>\S+)( (?P<conditions>.*))? -j (?P<target>\S*)'''
+re_rule='''-A (?P<chain>\S+)( (?P<conditions>.*))? -j (?P<target>\S*)( (?P<extra>.*))?'''
 re_rule = re.compile(re_rule)
 
 def parse_args():
@@ -49,9 +49,30 @@ def read_chains(input):
 
 def output_rules(rules, opts):
     for chain, rules in rules.items():
-        with open(os.path.join(opts.outputdir, '%s.txt' % chain), 'w') as fd:
-            fd.write('\n'.join(rules))
-            fd.write('\n')
+        with open(os.path.join(opts.outputdir, '%s.html' % chain), 'w') as fd:
+            fd.write('<pre class="iptables">\n')
+            for rule in rules:
+                mo = re_rule.match(rule)
+                if mo:
+                    fields = mo.groupdict()
+                    for k,v in fields.items():
+                        if v is None:
+                            fields[k] = ''
+
+                if mo and not mo.group('target').isupper():
+                    fd.write('-A %(chain)s %(conditions)s -j '
+                            '<a href="%(target)s.html">%(target)s</a> %(extra)s'
+                            % fields)
+                    fd.write('\n')
+                elif mo:
+                    fd.write('-A %(chain)s %(conditions)s -j '
+                            '<span class="builtin">%(target)s</span> %(extra)s'
+                            % fields)
+                    fd.write('\n')
+                else:
+                    fd.write('%s\n' % rule)
+
+            fd.write('</pre>\n')
 
 def output_dot(relationships, opts):
     dot = [
@@ -60,7 +81,7 @@ def output_dot(relationships, opts):
             ]
 
     for chain in relationships.keys():
-        dot.append('"%s" [URL="%s.txt"];' % (chain, chain))
+        dot.append('"%s" [URL="%s.html"];' % (chain, chain))
 
     for chain, targets in relationships.items():
         for target in targets:
