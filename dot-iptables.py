@@ -4,48 +4,89 @@ import os
 import sys
 import re
 import subprocess
+import argparse
 
-#-A nova-compute-local -d 172.16.10.60/32 -j nova-compute-inst-9007 
-re_chain='''-[PN] (?P<chain>\S+)( .*)?'''
+re_chain=''':(?P<chain>\S+)( .*)?'''
 re_chain = re.compile(re_chain)
 
 re_rule='''-A (?P<chain>\S+)( (?P<conditions>.*))? -j (?P<target>\S*)'''
 re_rule = re.compile(re_rule)
 
-def iptables(*args):
-    p = subprocess.Popen(['/sbin/iptables'] + list(args),
-            stdout=subprocess.PIPE)
-    stdout, stderr = p.communicate()
-    return stdout.split('\n')
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument('--outputdir', '-d', default='.')
+    p.add_argument('input', nargs='?')
 
-def main():
-    chains = {}
-    for line in iptables('-S'):
+    return p.parse_args()
+
+def sanitize(s):
+    return s.translate(''.join(chr(x) if chr(x).isalnum() else '_' for x in range(0,256)))
+
+def stripped(fd):
+    for line in fd:
+        yield line.strip()
+
+def read_chains(input):
+    relationships = {}
+    rules = {}
+    for line in stripped(input):
         mo = re_chain.match(line)
         if mo:
-            chains[mo.group('chain')] = []
+            relationships[mo.group('chain')] = []
+            rules[mo.group('chain')] = [line]
             continue
 
         mo = re_rule.match(line)
         if mo is None:
             continue
+        rules[mo.group('chain')].append(line)
         if mo.group('target').isupper():
             continue
 
-        chains[mo.group('chain')].append(mo.group('target'))
+        relationships[mo.group('chain')].append(mo.group('target'))
 
-    print 'digraph iptables {'
-    print 'rankdir=LR'
-    for chain in chains.keys():
-        with open('%s.txt' % chain, 'w') as fd:
-            fd.write('\n'.join(iptables('-S', chain)))
-        print '"%s" [URL="%s.txt"]' % (chain, chain)
+    return rules, relationships
 
-    for chain, targets in chains.items():
+def output_rules(rules, opts):
+    for chain, rules in rules.items():
+        with open(os.path.join(opts.outputdir, '%s.txt' % chain), 'w') as fd:
+            fd.write('\n'.join(rules))
+            fd.write('\n')
+
+def output_dot(relationships, opts):
+    dot = [
+            'digraph iptables {',
+            'rankdir=LR;',
+            ]
+
+    for chain in relationships.keys():
+        dot.append('"%s" [URL="%s.txt"];' % (chain, chain))
+
+    for chain, targets in relationships.items():
         for target in targets:
-            print '"%s" -> "%s"' % (chain, target)
+            dot.append('"%s" -> "%s";' % (chain, target))
 
-    print '}'
+    dot.append('}')
+
+    with open(os.path.join(opts.outputdir, 'iptables.dot'), 'w') as fd:
+        fd.write('\n'.join(dot))
+        fd.write('\n')
+
+def main():
+    opts = parse_args()
+    print opts
+
+    if not os.path.isdir(opts.outputdir):
+        print >>sys.stderr, (
+                'ERROR: output directory %s does not exist.' %
+                (opts.outputdir)
+                )
+        sys.exit(1)
+
+    rules, relationships = read_chains(sys.stdin)
+
+    output_rules(rules, opts)
+    output_dot(relationships, opts)
 
 if __name__ == '__main__':
         main()
