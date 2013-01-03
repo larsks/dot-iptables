@@ -22,6 +22,7 @@ re_rule = re.compile(re_rule)
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--outputdir', '-d', default='.')
+    p.add_argument('--render', action='store_true')
     p.add_argument('input', nargs='?')
 
     return p.parse_args()
@@ -83,6 +84,10 @@ def read_chains(input):
             handle_commit(iptables, None, line)
             continue
 
+        if line.startswith('#'):
+                continue
+
+        # We should never get here.
         print 'skip:', line
 
     del iptables['_table']
@@ -144,11 +149,15 @@ def output_dot(iptables, opts):
         fd.write(tmpl.render(tables=iptables.keys()))
 
     for table in iptables:
-        if table.startswith('_'):
-            continue
-
         output_dot_table(iptables, opts, table)
         continue
+
+def render_svg(iptables, opts):
+    for table in iptables:
+        p = subprocess.Popen(['dot', '-T', 'svg', '-o',
+                os.path.join(opts.outputdir, '%s.svg' % table),
+                os.path.join(opts.outputdir, '%s.dot' % table)])
+        p.communicate()
 
 def main():
     opts = parse_args()
@@ -160,9 +169,16 @@ def main():
                 )
         sys.exit(1)
 
+    print 'Reading iptables data.'
     iptables = read_chains(sys.stdin)
+
+    print 'Generating DOT output.'
     output_rules(iptables, opts)
     output_dot(iptables, opts)
+
+    if opts.render:
+        print 'Generating SVG output.'
+        render_svg(iptables, opts)
 
 if __name__ == '__main__':
         main()
