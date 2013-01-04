@@ -8,7 +8,12 @@ import subprocess
 import argparse
 import pprint
 
+import jinja2
 from jinja2 import Template
+from jinja2.loaders import PackageLoader
+
+env = jinja2.Environment(
+        loader=PackageLoader('dotiptables', 'templates'))
 
 re_table='''^\*(?P<table>\S+)'''
 re_table = re.compile(re_table)
@@ -16,7 +21,7 @@ re_table = re.compile(re_table)
 re_chain='''^:(?P<chain>\S+) (?P<policy>\S+) (?P<counters>\S+)'''
 re_chain = re.compile(re_chain)
 
-re_rule='''^-A (?P<chain>\S+)( (?P<conditions>.*))? -j (?P<target>\S*)( (?P<extra>.*))?'''
+re_rule='''^-A (?P<chain>\S+)( (?P<conditions>.*))?( -j (?P<target>\S*))?( (?P<extra>.*))?'''
 re_rule = re.compile(re_rule)
 
 re_commit='''^COMMIT'''
@@ -93,7 +98,7 @@ def read_chains(input):
     return iptables
 
 def output_rules(iptables, opts):
-    tmpl = Template(open('rules.html').read())
+    tmpl = env.get_template('rules.html')
     for table, chains in iptables.items():
         if table.startswith('_'):
             continue
@@ -116,7 +121,7 @@ def output_rules(iptables, opts):
                     policy=data['policy']))
 
 def output_dot_table(iptables, opts, table):
-    tmpl = Template(open('table.dot').read())
+    tmpl = env.get_template('table.dot')
 
     with open(os.path.join(opts.outputdir, '%s.dot' % table), 'w') as fd:
         fd.write(tmpl.render(
@@ -126,7 +131,7 @@ def output_dot_table(iptables, opts, table):
         fd.write('\n')
 
 def output_dot(iptables, opts):
-    tmpl = Template(open('index.html').read())
+    tmpl = env.get_template('index.html')
     with open(os.path.join(opts.outputdir, 'index.html'), 'w') as fd:
         fd.write(tmpl.render(tables=iptables.keys()))
 
