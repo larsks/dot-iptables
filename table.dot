@@ -1,8 +1,17 @@
+/*
+ * This represents the relationship between chains in the
+ * {{table}} table.  To generate an SVG diagram from this
+ * file, install GraphViz (http://www.graphviz.org/) and 
+ * then run:
+ *
+ * dot -T svg -o {{table}}.svg {{table}}.dot
+ *
+ */
 digraph table_{{table}} {
   rankdir=LR;
 
 {% for chain in chains %}
-  "{{chain}}" [URL="filter/{{chain}}.html"]{% endfor %}
+  "{{chain}}" [URL="{{table}}/{{chain}}.html"]{% endfor %}
 
 {% for chain, data in chains.items() -%}
 {% for target in data.targets %}
