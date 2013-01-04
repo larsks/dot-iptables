@@ -10,14 +10,20 @@ import pprint
 
 from jinja2 import Template
 
-re_table='''\*(?P<table>\S+)'''
+re_table='''^\*(?P<table>\S+)'''
 re_table = re.compile(re_table)
 
-re_chain=''':(?P<chain>\S+) (?P<policy>\S+) (?P<counters>\S+)'''
+re_chain='''^:(?P<chain>\S+) (?P<policy>\S+) (?P<counters>\S+)'''
 re_chain = re.compile(re_chain)
 
-re_rule='''-A (?P<chain>\S+)( (?P<conditions>.*))? -j (?P<target>\S*)( (?P<extra>.*))?'''
+re_rule='''^-A (?P<chain>\S+)( (?P<conditions>.*))? -j (?P<target>\S*)( (?P<extra>.*))?'''
 re_rule = re.compile(re_rule)
+
+re_commit='''^COMMIT'''
+re_commit=re.compile(re_commit)
+
+re_comment='''^#(?P<comment>.*)'''
+re_comment=re.compile(re_comment)
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -26,9 +32,6 @@ def parse_args():
     p.add_argument('input', nargs='?')
 
     return p.parse_args()
-
-def sanitize(s):
-    return s.translate(''.join(chr(x) if chr(x).isalnum() else '_' for x in range(0,256)))
 
 def stripped(fd):
     for line in fd:
@@ -64,31 +67,27 @@ def read_chains(input):
             '_table': None,
             }
 
+    actions = (
+            (re_table,   handle_table),
+            (re_chain,   handle_chain),
+            (re_rule,    handle_rule),
+            (re_commit,  handle_commit),
+            (re_comment, None),
+            )
+
     for line in stripped(input):
-        mo = re_table.match(line)
-        if mo:
-            handle_table(iptables, mo, line)
+        try:
+            for pattern, action in actions:
+                mo = pattern.match(line)
+                if mo:
+                    if action is not None:
+                        action(iptables, mo, line)
+                    raise StopIteration()
+        except StopIteration:
             continue
-
-        mo = re_chain.match(line)
-        if mo:
-            handle_chain(iptables, mo, line)
-            continue
-
-        mo = re_rule.match(line)
-        if mo:
-            handle_rule(iptables, mo, line)
-            continue
-
-        if line == 'COMMIT':
-            handle_commit(iptables, None, line)
-            continue
-
-        if line.startswith('#'):
-                continue
 
         # We should never get here.
-        print 'skip:', line
+        print >>sys.stderr, 'unrecognized line:', line
 
     del iptables['_table']
     return iptables
