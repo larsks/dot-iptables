@@ -30,6 +30,51 @@ re_commit=re.compile(re_commit)
 re_comment='''^#(?P<comment>.*)'''
 re_comment=re.compile(re_comment)
 
+builtin_targets = (
+    "ACCEPT",
+    "DROP",
+    "RETURN",
+    "AUDIT",
+    "CHECKSUM",
+    "CLASSIFY",
+    "CLUSTERIP",
+    "CONNMARK",
+    "CONNSECMARK",
+    "CT",
+    "DNAT",
+    "DNPT",
+    "DSCP",
+    "ECN",
+    "HL",
+    "HMARK",
+    "IDLETIMER",
+    "LED",
+    "LOG",
+    "MARK",
+    "MASQUERADE",
+    "NETMAP",
+    "NFLOG",
+    "NFQUEUE",
+    "NOTRACK",
+    "RATEEST",
+    "REDIRECT",
+    "REJECT",
+    "SECMARK",
+    "SET",
+    "SNAT",
+    "SNPT",
+    "SYNPROXY",
+    "TCPMSS",
+    "TCPOPTSTRIP",
+    "TEE",
+    "TOS",
+    "TPROXY",
+    "TRACE",
+    "TTL",
+    "ULOG",
+)
+
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--outputdir', '-d', default='.')
@@ -61,7 +106,7 @@ def handle_rule(iptables, mo, line):
     fields = dict( (k, v if v else '') for k,v in mo.groupdict().items())
     iptables['_table'][fields['chain']]['rules'].append(fields)
 
-    if mo.group('target') and not mo.group('target').isupper():
+    if mo.group('target') and mo.group('target') not in builtin_targets:
         iptables['_table'][fields['chain']]['targets'].add(mo.group('target'))
 
 def handle_commit(iptables, mo, line):
