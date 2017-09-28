@@ -21,7 +21,7 @@ re_table = re.compile(re_table)
 re_chain='''^:(?P<chain>\S+) (?P<policy>\S+) (?P<counters>\S+)'''
 re_chain = re.compile(re_chain)
 
-re_rule='''^-A (?P<chain>\S+)( (?P<conditions>.*))?( -j (?P<target>\S*))?( (?P<extra>.*))?'''
+re_rule='''^(\[(?P<packets>\d+):(?P<bytes>\d+)\] )?-A (?P<chain>\S+)( (?P<conditions>.*))?( -(?:j|g) (?P<target>\S*))( (?P<extra>.*))?'''
 re_rule = re.compile(re_rule)
 
 re_commit='''^COMMIT'''
