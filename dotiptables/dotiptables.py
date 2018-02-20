@@ -12,6 +12,14 @@ import jinja2
 from jinja2 import Template
 from jinja2.loaders import PackageLoader
 
+BUILTIN_CHAINS = [
+    'FORWARD',
+    'INPUT',
+    'OUTPUT',
+    'POSTROUTING',
+    'PREROUTING',
+]
+
 env = jinja2.Environment(
         loader=PackageLoader('dotiptables', 'templates'))
 
@@ -61,7 +69,7 @@ def handle_rule(iptables, mo, line):
     fields = dict( (k, v if v else '') for k,v in mo.groupdict().items())
     iptables['_table'][fields['chain']]['rules'].append(fields)
 
-    if mo.group('target') and not mo.group('target').isupper():
+    if mo.group('target') and mo.group('target') not in BUILTIN_CHAINS:
         iptables['_table'][fields['chain']]['targets'].add(mo.group('target'))
 
 def handle_commit(iptables, mo, line):
