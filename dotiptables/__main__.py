@@ -101,7 +101,7 @@ def read_chains(input):
             continue
 
         # We should never get here.
-        print >>sys.stderr, 'unrecognized line:', line
+        print('unrecognized line:', line, file=sys.stderr)
 
     del iptables['_table']
     return iptables
@@ -115,7 +115,7 @@ def output_rules(iptables, opts):
         dir = os.path.join(opts.outputdir, table)
         try:
             os.mkdir(dir)
-        except OSError, detail:
+        except OSError as detail:
             if detail.errno == errno.EEXIST:
                 pass
             else:
@@ -159,22 +159,22 @@ def main():
     opts = parse_args()
 
     if not os.path.isdir(opts.outputdir):
-        print >>sys.stderr, (
+        print((
                 'ERROR: output directory %s does not exist.' %
                 (opts.outputdir)
-                )
+                ), file=sys.stderr)
         sys.exit(1)
 
-    print 'Reading iptables data.'
+    print('Reading iptables data.')
     with (open(opts.input, 'r') if opts.input else sys.stdin) as fd:
         iptables = read_chains(fd)
 
-    print 'Generating DOT output.'
+    print('Generating DOT output.')
     output_rules(iptables, opts)
     output_dot(iptables, opts)
 
     if opts.render:
-        print 'Generating SVG output.'
+        print('Generating SVG output.')
         render_svg(iptables, opts)
 
 if __name__ == '__main__':
